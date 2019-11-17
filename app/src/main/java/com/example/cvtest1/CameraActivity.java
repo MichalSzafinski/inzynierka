@@ -1,15 +1,16 @@
 package com.example.cvtest1;
 
-import android.graphics.Camera;
 import android.os.Bundle;
+import android.os.CountDownTimer;
 import android.support.v7.app.AppCompatActivity;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.opencv.android.BaseLoaderCallback;
@@ -20,12 +21,13 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
-import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
-import java.lang.reflect.Method;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class CameraActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
 
@@ -38,19 +40,32 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
     //image holder
     Mat img;
 
+    ColorBlobDetector colorDetector;
+    Button offsetTextView;
+    Button calibrateButton;
+    int currentOffset = 0;
+
     int sensitivity = 15;
     Scalar lowColor = new Scalar(70-sensitivity, 100, 60);
     Scalar highColor = new Scalar(70+sensitivity,255, 255);
 
+    private Scalar CONTOUR_COLOR = new Scalar(255,0,0,255);
+
+    private int defaultWidth = -2;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_camera);
 
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        setContentView(R.layout.activity_camera);
+/*
         this.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         View decorView = this.getWindow().getDecorView();
         int uiOptions = View.SYSTEM_UI_FLAG_LOW_PROFILE;
-        decorView.setSystemUiVisibility(uiOptions);
+        decorView.setSystemUiVisibility(uiOptions);*/
 
         cameraBridgeViewBase = (JavaCameraView) findViewById(R.id.cameraViewer);
         cameraBridgeViewBase.setVisibility(SurfaceView.VISIBLE);
@@ -72,64 +87,32 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             }
         };
 
-        //Text
-        final EditText highPinkText =findViewById(R.id.highPinkEditText);
-        final EditText lowPinkText = findViewById(R.id.lowPinkEditText);
+        //offsetTextView = findViewById(R.id.offsetTextView);
+        calibrateButton = findViewById(R.id.calibrateButton);
+        calibrateButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                defaultWidth = -1;
+                new CountDownTimer(200000,100) {
 
-//        highPinkText.addTextChangedListener(new TextWatcher() {
-//            @Override
-//            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-//
-//            }
-//
-//            @Override
-//            public void onTextChanged(CharSequence s, int start, int before, int count) {
-//
-//            }
-//
-//            @Override
-//            public void afterTextChanged(Editable s) {
-//                try
-//                {
-//                    String[] split = highPinkText.getText().toString().split(",");
-//
-//                    highColor = new Scalar(Integer.parseInt(split[0]), Integer.parseInt(split[1]), Integer.parseInt(split[2]));
-//                }
-//                catch(Exception e)
-//                {
-//                }
-//            }
-//        });
-//        lowPinkText.addTextChangedListener(new TextWatcher() {
-//            @Override
-//            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-//
-//            }
-//
-//            @Override
-//            public void onTextChanged(CharSequence s, int start, int before, int count) {
-//
-//            }
-//
-//            @Override
-//            public void afterTextChanged(Editable s) {
-//                try
-//                {
-//                    String[] split = lowPinkText.getText().toString().split(",");
-//
-//                    lowColor = new Scalar(Integer.parseInt(split[0]), Integer.parseInt(split[1]), Integer.parseInt(split[2]));
-//                }
-//                catch(Exception e)
-//                {
-//
-//                }
-//            }
-//        });
+                    @Override
+                    public void onTick(long millisUntilFinished) {
+                        calibrateButton.setText(String.valueOf(currentOffset));
+                    }
+
+                    @Override
+                    public void onFinish() {
+
+                    }
+                }.start();
+            }
+        });
     }
 
     @Override
     public void onCameraViewStarted(int width, int height) {
-
+        colorDetector = new ColorBlobDetector();
+        colorDetector.setBounds(lowColor, highColor);
     }
 
     @Override
@@ -142,61 +125,30 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
         Mat src = inputFrame.rgba();
 
-        Mat hsvFrame = new Mat(src.rows(), src.cols(), CvType.CV_8U, new Scalar(3));
-        Imgproc.cvtColor(src, hsvFrame, Imgproc.COLOR_RGB2HSV, 3);
+        colorDetector.process(src);
+        List<MatOfPoint> contours = colorDetector.getContours();
+        Log.e("CAMERA_ACTIVITY", "Contours count: " + contours.size());
+        Imgproc.drawContours(src, contours, -1, CONTOUR_COLOR);
 
-        Mat pinkMat = new Mat(hsvFrame.rows(), hsvFrame.cols(), CvType.CV_8UC1, new Scalar(3));
-        Core.inRange(hsvFrame, lowColor, highColor, pinkMat);
-        //apply a series of erosions and dilations to the mask
-        // using an elliptical kernel
-        // blur the mask to help remove noise, then apply the
-        // mask to the frame
-//        final Size ksize = new Size(3, 3);
-//
-//        Mat skin = new Mat(pinkMat.rows(), pinkMat.cols(), CvType.CV_8U, new Scalar(3));
-//        Imgproc.GaussianBlur(pinkMat, pinkMat, ksize, 0);
-//        Core.bitwise_and(src, src, skin, pinkMat);
-
-        double buff[] = new double[(int)pinkMat.total() * pinkMat.channels()];
-        pinkMat.get(0,0, buff);
-        int sumHeight=0, sumWidth=0, quantity=0;
-        for (int i=0;i<buff.length; i++)
+        if(contours.size()>0)
         {
-            if(buff[i]>0)
-            {
-                quantity++;
-                int height = i%pinkMat.rows();
-                int width = i - height;
-                sumHeight+=height;
-                sumWidth+=width;
+            List<Point> points = contours.get(0).toList();
+            Point maxWidth = points.get(0), minWidth =points.get(0);
+            for (Point p : points) {
+                if(p.x>maxWidth.x)
+                    maxWidth = p;
+                if(p.x<minWidth.x)
+                    minWidth = p;
             }
-        }
-//        for (int i=0;i<pinkMat.rows(); i++)
-//        {
-//            for (int j=0;j<pinkMat.cols(); j++)
-//            {
-//                if(pinkMat.get(i,j)[0]>0)
-//                {
-//                    quantity++;
-//                    sumHeight+=i;
-//                    sumWidth+=j;
-//                }
-//            }
-//
-//        }
-        if(quantity>20)
-        {
-            int avgHeight = sumHeight/quantity, avgWidth = sumHeight/quantity;
 
-            Imgproc.circle (
-                    src,                 //Matrix obj of the image
-                    new Point(avgHeight, avgWidth),    //Center of the circle
-                    10,                    //Radius
-                    new Scalar(0, 0, 255),  //Scalar object for color
-                    10                      //Thickness of the circle
-            );
-        }
 
+
+            if(defaultWidth==-1)
+                defaultWidth = (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
+
+            int currentAvgWidth = (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
+            currentOffset = currentAvgWidth - defaultWidth;
+        }
 
         return src;
     }
@@ -224,19 +176,6 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         super.onDestroy();
         if (cameraBridgeViewBase != null) {
             cameraBridgeViewBase.disableView();
-        }
-    }
-    protected void setDisplayOrientation(Camera camera, int angle){
-        Method downPolymorphic;
-        try
-        {
-            downPolymorphic = camera.getClass().getMethod("setDisplayOrientation", new Class[] { int.class });
-            if (downPolymorphic != null)
-                downPolymorphic.invoke(camera, new Object[] { angle });
-        }
-        catch (Exception e1)
-        {
-            e1.printStackTrace();
         }
     }
 }
