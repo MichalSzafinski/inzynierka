@@ -6,10 +6,8 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -18,8 +16,6 @@ import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Core;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Point;
@@ -27,7 +23,6 @@ import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class CameraActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
 
@@ -41,9 +36,9 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
     Mat img;
 
     ColorBlobDetector colorDetector;
-    Button offsetTextView;
+    TextView offsetTextView;
     Button calibrateButton;
-    int currentOffset = 0;
+    double currentOffset = 0;
 
     int sensitivity = 15;
     Scalar lowColor = new Scalar(70-sensitivity, 100, 60);
@@ -52,13 +47,19 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
     private Scalar CONTOUR_COLOR = new Scalar(255,0,0,255);
 
     private int defaultWidth = -2;
+    private int defaultToLeftWidth = 0;
+    private int defaultToRightWidth = 0;
+    private CountDownTimer timer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        //Remove title bar
+        //this.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        //Remove notification bar
+        this.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         setContentView(R.layout.activity_camera);
 /*
@@ -87,17 +88,21 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             }
         };
 
-        //offsetTextView = findViewById(R.id.offsetTextView);
+        offsetTextView = findViewById(R.id.offsetText);
         calibrateButton = findViewById(R.id.calibrateButton);
         calibrateButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if(timer!=null)
+                    timer.cancel();
                 defaultWidth = -1;
-                new CountDownTimer(200000,100) {
+                defaultToLeftWidth = 0;
+                defaultToRightWidth = 0;
+                timer = new CountDownTimer(200000,100) {
 
                     @Override
                     public void onTick(long millisUntilFinished) {
-                        calibrateButton.setText(String.valueOf(currentOffset));
+                        offsetTextView.setText("Current offset: " + String.valueOf(currentOffset));
                     }
 
                     @Override
@@ -140,14 +145,25 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
                 if(p.x<minWidth.x)
                     minWidth = p;
             }
-
-
-
             if(defaultWidth==-1)
                 defaultWidth = (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
 
             int currentAvgWidth = (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
-            currentOffset = currentAvgWidth - defaultWidth;
+            //int currentOffsetInPixels = currentAvgWidth - defaultWidth;
+
+            if(currentAvgWidth > defaultWidth + defaultToRightWidth)
+                defaultToRightWidth = currentAvgWidth - defaultWidth;
+            if(currentAvgWidth < defaultWidth - defaultToLeftWidth)
+                defaultToLeftWidth = defaultWidth - currentAvgWidth;
+
+            if(currentAvgWidth>defaultWidth)
+            {
+                currentOffset = (double)(currentAvgWidth - defaultWidth) / defaultToRightWidth;
+            }
+            else
+            {
+                currentOffset = - ((double)(defaultWidth -  currentAvgWidth) / defaultToLeftWidth);
+            }
         }
 
         return src;
