@@ -1,4 +1,4 @@
-package com.example.cvtest1;
+package com.example.BridgeDetecting;
 
 import android.os.Bundle;
 import android.os.CountDownTimer;
@@ -137,19 +137,9 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
         if(contours.size()>0)
         {
-            List<Point> points = contours.get(0).toList();
-            Point maxWidth = points.get(0), minWidth =points.get(0);
-            for (Point p : points) {
-                if(p.x>maxWidth.x)
-                    maxWidth = p;
-                if(p.x<minWidth.x)
-                    minWidth = p;
-            }
+            int currentAvgWidth = GetAverageWidth(contours.get(0).toList());
             if(defaultWidth==-1)
-                defaultWidth = (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
-
-            int currentAvgWidth = (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
-            //int currentOffsetInPixels = currentAvgWidth - defaultWidth;
+                defaultWidth = currentAvgWidth;
 
             if(currentAvgWidth > defaultWidth + defaultToRightWidth)
                 defaultToRightWidth = currentAvgWidth - defaultWidth;
@@ -193,5 +183,21 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         if (cameraBridgeViewBase != null) {
             cameraBridgeViewBase.disableView();
         }
+    }
+
+    public static int GetAverageWidth(List<Point> points)
+    {
+        if(points.size()==0)
+            throw new IllegalArgumentException();
+
+        Point maxWidth = points.get(0), minWidth = points.get(0);
+        for (Point p : points) {
+            if(p.x>maxWidth.x)
+                maxWidth = p;
+            if(p.x<minWidth.x)
+                minWidth = p;
+        }
+
+        return (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
     }
 }

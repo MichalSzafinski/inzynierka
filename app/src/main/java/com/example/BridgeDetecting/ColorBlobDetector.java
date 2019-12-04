@@ -1,4 +1,4 @@
-package com.example.cvtest1;
+package com.example.BridgeDetecting;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -8,7 +8,6 @@ import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
-import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
 
@@ -24,11 +23,11 @@ public class ColorBlobDetector {
     private List<MatOfPoint> mContours = new ArrayList<MatOfPoint>();
 
     // Cache
-    Mat mPyrDownMat = new Mat();
-    Mat mHsvMat = new Mat();
-    Mat mMask = new Mat();
-    Mat mDilatedMask = new Mat();
-    Mat mHierarchy = new Mat();
+    private Mat mPyrDownMat = new Mat();
+    private Mat mHsvMat = new Mat();
+    private Mat mMask = new Mat();
+    private Mat mDilatedMask = new Mat();
+    private Mat mHierarchy = new Mat();
 
     public void setColorRadius(Scalar radius) {
         mColorRadius = radius;
@@ -87,29 +86,37 @@ public class ColorBlobDetector {
 
         Imgproc.findContours(mDilatedMask, contours, mHierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-        // Find max contour area
-        double maxArea = 0;
-        Iterator<MatOfPoint> each = contours.iterator();
-        while (each.hasNext()) {
-            MatOfPoint wrapper = each.next();
-            double area = Imgproc.contourArea(wrapper);
-            if (area > maxArea)
-                maxArea = area;
-        }
 
-        // Filter contours by area and resize to fit the original image size
+        MatOfPoint maxAreaContour = GetMaxAreaContour(contours);
         mContours.clear();
-        each = contours.iterator();
-        while (each.hasNext()) {
-            MatOfPoint contour = each.next();
-            if (Imgproc.contourArea(contour) == maxArea) {
-                Core.multiply(contour, new Scalar(4,4), contour);
-                mContours.add(contour);
-            }
+        if(maxAreaContour!=null)
+        {
+            Core.multiply(maxAreaContour, new Scalar(4,4), maxAreaContour);
+            mContours.add(maxAreaContour);
         }
     }
 
     public List<MatOfPoint> getContours() {
         return mContours;
+    }
+
+    public static MatOfPoint GetMaxAreaContour(List<MatOfPoint> contours)
+    {
+        if(contours.size()==0)
+            throw new IllegalArgumentException();
+
+        // Find max contour area
+        double maxArea = 0;
+        MatOfPoint maxAreaContour = null;
+        Iterator<MatOfPoint> each = contours.iterator();
+        while (each.hasNext()) {
+            MatOfPoint wrapper = each.next();
+            double area = Imgproc.contourArea(wrapper);
+            if (area > maxArea) {
+                maxAreaContour = wrapper;
+                maxArea = area;
+            }
+        }
+        return maxAreaContour;
     }
 }
