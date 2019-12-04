@@ -86,14 +86,15 @@ public class ColorBlobDetector {
 
         Imgproc.findContours(mDilatedMask, contours, mHierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
-
-        MatOfPoint maxAreaContour = GetMaxAreaContour(contours);
-        mContours.clear();
-        if(maxAreaContour!=null)
-        {
-            Core.multiply(maxAreaContour, new Scalar(4,4), maxAreaContour);
-            mContours.add(maxAreaContour);
+        if (contours.size() > 0) {
+            MatOfPoint maxAreaContour = GetMaxAreaContour(contours);
+            mContours.clear();
+            if (maxAreaContour != null) {
+                Core.multiply(maxAreaContour, new Scalar(4, 4), maxAreaContour);
+                mContours.add(maxAreaContour);
+            }
         }
+
     }
 
     public List<MatOfPoint> getContours() {
