@@ -1,7 +1,9 @@
 package com.example.BridgeDetecting;
 
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.SurfaceView;
@@ -22,6 +24,11 @@ import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
 
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.util.List;
 
 public class CameraActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
@@ -50,11 +57,20 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
     private int defaultToLeftWidth = 0;
     private int defaultToRightWidth = 0;
     private CountDownTimer timer;
+    private TcpClient mTcpClient;
+    private boolean tcpConnected = false;
+
+    private static final String MOBILE_APP_KEY = "WALK-ON-THE-BRIDGE-MOBILE";
+    private static final String VR_MODULE_KEY = "WALK-ON-THE-BRIDGE-VR";
+    private static final String BROADCAST_ADDRESS = "255.255.255.255";
+    private static final int PORT = 9005;
+    private static final int TIMEOUT = 3000;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        findVRModule();
         //Remove title bar
         //this.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -127,13 +143,16 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-
         Mat src = inputFrame.rgba();
 
         colorDetector.process(src);
         List<MatOfPoint> contours = colorDetector.getContours();
         Log.e("CAMERA_ACTIVITY", "Contours count: " + contours.size());
         Imgproc.drawContours(src, contours, -1, CONTOUR_COLOR);
+
+//        if(tcpConnected) {
+//            mTcpClient.sendMessage("X");
+//        }
 
         if(contours.size()>0)
         {
@@ -154,7 +173,15 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
             {
                 currentOffset = - ((double)(defaultWidth -  currentAvgWidth) / defaultToLeftWidth);
             }
+
+            if(tcpConnected) {
+                mTcpClient.sendDouble(currentOffset);
+            }
         }
+        else if(tcpConnected) {
+            mTcpClient.sendDouble(0.0);
+        }
+
 
         return src;
     }
@@ -199,5 +226,101 @@ public class CameraActivity extends AppCompatActivity implements CameraBridgeVie
         }
 
         return (int)((maxWidth.x-minWidth.x)/2 + minWidth.x);
+    }
+
+    private void findVRModule() {
+        final Handler handler = new Handler();
+        Thread thread = new Thread(new Runnable() {
+            boolean vrModuleFound = false;
+            String vrModuleIP;
+
+            @Override
+            public void run() {
+                DatagramSocket ds = null;
+                try {
+                    ds = new DatagramSocket();
+
+                    InetAddress serverAddr = InetAddress.getByName(BROADCAST_ADDRESS);
+                    DatagramPacket dp;
+                    dp = new DatagramPacket(MOBILE_APP_KEY.getBytes(), MOBILE_APP_KEY.length(), serverAddr, PORT);
+                    ds.send(dp);
+
+                    String receiveString;
+                    byte[] lMsg = new byte[1024];
+                    dp = new DatagramPacket(lMsg, lMsg.length);
+                    long startTime = System.currentTimeMillis();
+                    do {
+                        ds.setSoTimeout(TIMEOUT);
+                        ds.receive(dp);
+                        receiveString = new String(lMsg, 0, dp.getLength());
+                    } while(!receiveString.equals(VR_MODULE_KEY) && (System.currentTimeMillis() - startTime) < TIMEOUT);
+                    if((System.currentTimeMillis() - startTime) >= TIMEOUT) {
+//                        throw new SocketTimeoutException();
+                    }
+                    vrModuleFound = true;
+                    vrModuleIP = ((InetAddress)dp.getAddress()).getHostAddress();
+                }
+                catch (SocketTimeoutException e) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            Toast.makeText(CameraActivity.this, "Couldn't find VR Module", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+                catch (IOException e) {
+                    e.printStackTrace();
+                }
+                finally {
+                    if (ds != null) {
+                        ds.close();
+                    }
+                }
+
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if(vrModuleFound) {
+                            new ConnectTask(vrModuleIP, PORT).execute();
+                            Toast.makeText(CameraActivity.this, "Connected to VR module", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+        });
+
+        thread.start();
+    }
+
+    public class ConnectTask extends AsyncTask<String, String, TcpClient> {
+        private String serverIp;
+        private int serverPort;
+
+        public ConnectTask(String ip, int port) {
+            serverIp = ip;
+            serverPort = port;
+        }
+
+        @Override
+        protected TcpClient doInBackground(String... message) {
+
+            //we create a TCPClient object
+            mTcpClient = new TcpClient(serverIp, serverPort, new TcpClient.OnMessageReceived() {
+                @Override
+                //here the messageReceived method is implemented
+                public void messageReceived(String message) {
+                }
+            });
+            tcpConnected = mTcpClient.run();
+            return null;
+        }
+
+//        @Override
+//        protected void onProgressUpdate(String... values) {
+//            super.onProgressUpdate(values);
+//            //response received from server
+//            Log.d("test", "response " + values[0]);
+//            //process server response here....
+//
+//        }
     }
 }
